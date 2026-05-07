@@ -331,7 +331,8 @@ impl TerminalView {
                 // triggers a re-render of pane chrome.
                 ctx.notify();
             }
-            AmbientAgentViewModelEvent::UpdatedSetupCommandVisibility => (),
+            AmbientAgentViewModelEvent::UpdatedSetupCommandVisibility
+            | AmbientAgentViewModelEvent::AuthSecretSelected => (),
         }
     }
 
