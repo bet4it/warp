@@ -11,7 +11,7 @@ use warpui::{AppContext, Entity, EntityId, ModelContext, SingletonEntity};
 use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
 use crate::ai::agent::{conversation::AIConversationId, extract_user_query_mode};
 use crate::ai::ambient_agents::spawn::{spawn_task, submit_run_followup, AmbientAgentEvent};
-use crate::ai::ambient_agents::task::HarnessConfig;
+use crate::ai::ambient_agents::task::{HarnessAuthSecretsConfig, HarnessConfig};
 use crate::ai::ambient_agents::telemetry::CloudAgentTelemetryEvent;
 use crate::ai::ambient_agents::AmbientAgentTaskId;
 use crate::ai::ambient_agents::{
@@ -198,7 +198,9 @@ pub struct AmbientAgentViewModel {
     worker_host: Option<String>,
     /// Selected model id for a third-party harness (e.g. `"opus"` for Claude).
     harness_model_id: Option<String>,
-    /// Whether the harness CLI (e.g. `claude`, `gemini`) has started running for a non-oz run.
+    /// Name of the selected auth secret for the current non-Oz harness.
+    harness_auth_secret_name: Option<String>,
+    /// Whether the harness CLI
     /// Used to transition the cloud-mode setup UI out of the pre-first-exchange phase when
     /// there is no oz `AppendedExchange` to key off of.
     harness_command_started: bool,
@@ -265,6 +267,7 @@ impl AmbientAgentViewModel {
             harness,
             worker_host: None,
             harness_model_id: None,
+            harness_auth_secret_name: None,
             harness_command_started: false,
             active_execution_session_id: None,
             last_ended_execution_session_id: None,
@@ -410,6 +413,7 @@ impl AmbientAgentViewModel {
         }
         self.harness = harness;
         self.harness_model_id = None;
+        self.harness_auth_secret_name = None;
         ctx.emit(AmbientAgentViewModelEvent::HarnessSelected);
     }
 
@@ -431,6 +435,22 @@ impl AmbientAgentViewModel {
         }
         self.harness_model_id = harness_model_id;
         ctx.emit(AmbientAgentViewModelEvent::HarnessModelSelected);
+    }
+
+    pub fn selected_harness_auth_secret_name(&self) -> Option<&str> {
+        self.harness_auth_secret_name.as_deref()
+    }
+
+    pub fn set_harness_auth_secret_name(
+        &mut self,
+        name: Option<String>,
+        ctx: &mut ModelContext<Self>,
+    ) {
+        if self.harness_auth_secret_name == name {
+            return;
+        }
+        self.harness_auth_secret_name = name;
+        ctx.emit(AmbientAgentViewModelEvent::AuthSecretSelected);
     }
 
     /// True when the run is configured to use a non-Oz execution harness and the
@@ -846,12 +866,20 @@ impl AmbientAgentViewModel {
             model_id: self.harness_model_id.clone(),
         });
 
+        let harness_auth_secrets =
+            self.harness_auth_secret_name.as_ref().map(|name| {
+                HarnessAuthSecretsConfig {
+                    claude_auth_secret_name: Some(name.clone()),
+                }
+            });
+
         AgentConfigSnapshot {
             environment_id: self.environment_id.as_ref().map(|id| id.to_string()),
             model_id: oz_model,
             computer_use_enabled,
             worker_host: self.worker_host.clone(),
             harness: third_party_harness,
+            harness_auth_secrets,
             ..Default::default()
         }
     }
@@ -1423,6 +1451,8 @@ pub enum AmbientAgentViewModelEvent {
     },
 
     UpdatedSetupCommandVisibility,
+    /// The selected harness auth secret changed.
+    AuthSecretSelected,
 }
 
 impl Entity for AmbientAgentViewModel {
