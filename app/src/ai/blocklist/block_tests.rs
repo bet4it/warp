@@ -1,8 +1,31 @@
+use super::first_ask_user_question_action_id;
 use super::{CollapsibleElementState, CollapsibleExpansionState};
+use crate::ai::agent::task::TaskId;
+use crate::ai::agent::{
+    AIAgentAction, AIAgentActionId, AIAgentActionType, AIAgentOutput, AIAgentOutputMessage,
+    AIAgentOutputMessageType, MessageId,
+};
 use crate::settings::AISettings;
 use crate::test_util::settings::initialize_settings_for_tests;
 use settings::Setting;
 use warpui::{App, SingletonEntity};
+
+fn test_action(action_id: &str, action: AIAgentActionType) -> AIAgentAction {
+    AIAgentAction {
+        id: AIAgentActionId::from(action_id.to_string()),
+        action,
+        task_id: TaskId::new(format!("task-{action_id}")),
+        requires_result: false,
+    }
+}
+
+fn action_message(message_id: &str, action: AIAgentAction) -> AIAgentOutputMessage {
+    AIAgentOutputMessage {
+        id: MessageId::new(message_id.to_string()),
+        message: AIAgentOutputMessageType::Action(action),
+        citations: vec![],
+    }
+}
 
 #[test]
 fn reasoning_auto_collapses_when_user_has_not_manually_toggled() {
@@ -83,5 +106,76 @@ fn manual_reexpand_while_streaming_stays_expanded_after_finish() {
                 scroll_pinned_to_bottom: false
             }
         ));
+    });
+}
+
+#[test]
+fn first_ask_user_question_action_id_returns_first_ask_action() {
+    let output = AIAgentOutput {
+        messages: vec![
+            action_message(
+                "init-project",
+                test_action("init-project", AIAgentActionType::InitProject),
+            ),
+            action_message(
+                "ask-1",
+                test_action(
+                    "ask-1",
+                    AIAgentActionType::AskUserQuestion { questions: vec![] },
+                ),
+            ),
+            action_message(
+                "ask-2",
+                test_action(
+                    "ask-2",
+                    AIAgentActionType::AskUserQuestion { questions: vec![] },
+                ),
+            ),
+        ],
+        ..Default::default()
+    };
+
+    assert_eq!(
+        first_ask_user_question_action_id(&output),
+        Some(AIAgentActionId::from("ask-1".to_string()))
+    );
+}
+
+#[test]
+fn first_ask_user_question_action_id_returns_none_without_ask_action() {
+    let output = AIAgentOutput {
+        messages: vec![action_message(
+            "init-project",
+            test_action("init-project", AIAgentActionType::InitProject),
+        )],
+        ..Default::default()
+    };
+
+    assert_eq!(first_ask_user_question_action_id(&output), None);
+}
+
+#[test]
+fn should_show_agent_mode_ask_user_question_speedbump_defaults_to_true() {
+    App::test((), |mut app| async move {
+        initialize_settings_for_tests(&mut app);
+        AISettings::handle(&app).read(&app, |settings, _ctx| {
+            assert!(*settings.should_show_agent_mode_ask_user_question_speedbump);
+        });
+    });
+}
+
+#[test]
+fn should_show_agent_mode_ask_user_question_speedbump_round_trips_to_false() {
+    App::test((), |mut app| async move {
+        initialize_settings_for_tests(&mut app);
+        AISettings::handle(&app).update(&mut app, |settings, ctx| {
+            settings
+                .should_show_agent_mode_ask_user_question_speedbump
+                .set_value(false, ctx)
+                .unwrap();
+        });
+        AISettings::handle(&app).read(&app, |settings, _ctx| {
+            assert!(!*settings.should_show_agent_mode_ask_user_question_speedbump);
+        });
     });
 }

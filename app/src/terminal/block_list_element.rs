@@ -4430,12 +4430,35 @@ impl Element for BlockListElement {
         app: &AppContext,
     ) -> bool {
         let z_index = self.child_max_z_index.expect("Z-index should exist.");
-        let Some(event_at_z_index) = event.at_z_index(z_index, ctx) else {
-            // Only proceed if there's a relevant event at this z-index.
-            return false;
-        };
+        let event_at_z_index = event.at_z_index(z_index, ctx);
 
         let mut handled = false;
+        if event_at_z_index.is_none()
+            && matches!(
+                event.raw_event(),
+                Event::ScrollWheel { .. }
+                    | Event::LeftMouseDown { .. }
+                    | Event::LeftMouseUp { .. }
+                    | Event::LeftMouseDragged { .. }
+                    | Event::MiddleMouseDown { .. }
+                    | Event::RightMouseDown { .. }
+                    | Event::BackMouseDown { .. }
+                    | Event::ForwardMouseDown { .. }
+            )
+        {
+            if self.pane_state.is_focused() {
+                for view_id in self.visible_rich_content_views() {
+                    if let Some(rich_content) = self.rich_content_elements.get_mut(&view_id) {
+                        handled |= rich_content.dispatch_event(event, ctx, app);
+                    }
+                }
+            }
+            return handled;
+        }
+
+        let Some(event_at_z_index) = event_at_z_index else {
+            return false;
+        };
         let events_to_propagate_on = matches!(
             event_at_z_index,
             Event::MouseMoved { .. }
