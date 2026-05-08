@@ -1316,9 +1316,7 @@ impl EventLoop {
                         // characters via `SendInput` instead of going through the standard IME
                         // pipeline. The resulting key event has
                         // `logical_key == Key::Unidentified(...)`
-                        event_text.map(|chars| {
-                            ConvertedEvent::Event(TypedCharacters { chars })
-                        })
+                        event_text.map(|chars| ConvertedEvent::Event(TypedCharacters { chars }))
                     }
                     None => None,
                 }
